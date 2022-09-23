@@ -10,13 +10,30 @@ import weibo.utils.util as util
 from scrapy.exceptions import CloseSpider
 from scrapy.utils.project import get_project_settings
 from weibo.items import WeiboItem
+import logging
 
+# logging.basicConfig(filename='../weibo search/'+__name__+'.log',format='[%(asctime)s-%(filename)s-%(levelname)s:%(message)s]', level = logging.WARNING,filemode='a',datefmt='%Y-%m-%d%I:%M:%S %p')
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+# 消息格式化
+formatter = logging.Formatter(fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y/%m/%d %H:%M:%S')
+
+# 日志文件输出
+fh = logging.FileHandler('../weibo-search-hongchuan/' + __name__ + '.log')
+fh.setFormatter(formatter)
+logger.addHandler(fh)
+
+
+# create logger
 
 class SearchSpider(scrapy.Spider):
     name = 'search'
     allowed_domains = ['weibo.com']
     settings = get_project_settings()
     keyword_list = settings.get('KEYWORD_LIST')
+    counting = 0
     if not isinstance(keyword_list, list):
         if not os.path.isabs(keyword_list):
             keyword_list = os.getcwd() + os.sep + keyword_list
@@ -42,41 +59,62 @@ class SearchSpider(scrapy.Spider):
     mysql_error = False
     pymysql_error = False
 
+    # initialize date in  yy-mm-dd-hh format
+    start_date = datetime.strptime(start_date, '%Y-%m-%d')
+    end_date = datetime.strptime(end_date,
+                                 '%Y-%m-%d')
+    start_str = start_date.strftime('%Y-%m-%d') + '-0'
+    end_str = end_date.strftime('%Y-%m-%d') + '-0'
+    end_date_2 = datetime.strptime(end_str, '%Y-%m-%d-%H')
+    start_date_2 = datetime.strptime(start_str, '%Y-%m-%d-%H')
+
+    constant_url = ''
+
     def start_requests(self):
-        start_date = datetime.strptime(self.start_date, '%Y-%m-%d')
-        end_date = datetime.strptime(self.end_date,
-                                     '%Y-%m-%d') + timedelta(days=1)
-        start_str = start_date.strftime('%Y-%m-%d') + '-0'
-        end_str = end_date.strftime('%Y-%m-%d') + '-0'
         for keyword in self.keyword_list:
+            logger.info('keyword searching: ' + keyword)
             if not self.settings.get('REGION') or '全部' in self.settings.get(
                     'REGION'):
                 base_url = 'https://s.weibo.com/weibo?q=%s' % keyword
                 url = base_url + self.weibo_type
-                url += self.contain_type
-                url += '&timescope=custom:{}:{}'.format(start_str, end_str)
-                yield scrapy.Request(url=url,
-                                     callback=self.parse,
-                                     meta={
-                                         'base_url': base_url,
-                                         'keyword': keyword
-                                     })
-            else:
-                for region in self.regions.values():
-                    base_url = (
-                        'https://s.weibo.com/weibo?q={}&region=custom:{}:1000'
-                    ).format(keyword, region['code'])
-                    url = base_url + self.weibo_type
-                    url += self.contain_type
-                    url += '&timescope=custom:{}:{}'.format(start_str, end_str)
-                    # 获取一个省的搜索结果
-                    yield scrapy.Request(url=url,
-                                         callback=self.parse,
-                                         meta={
-                                             'base_url': base_url,
-                                             'keyword': keyword,
-                                             'province': region
-                                         })
+                self.constant_url =  url + self.contain_type
+
+                # search by 1 hr
+                while self.start_date_2 < self.end_date_2:
+                    for i in range(1, 25):
+                        # start date e.g. 2020-09-01-00:00
+                        start_str = self.start_date_2.strftime('%Y-%m-%d-X%H').replace(
+                            'X0', 'X').replace('X', '')
+
+                        # update date e.g. 2020-09-01-01:00
+                        self.start_date_2 = self.start_date_2 + timedelta(hours=1)
+                        end_str = self.start_date_2.strftime('%Y-%m-%d-X%H').replace(
+                            'X0', 'X').replace('X', '')
+
+                        # construct url
+                        start_url = self.constant_url + '&timescope=custom:{}:{}'.format(start_str, end_str)
+                        yield scrapy.Request(url=start_url,
+                                             callback=self.parse,
+                                             meta={
+                                                 'base_url': base_url,
+                                                 'keyword': keyword
+                                             })
+            # else:
+            #     for region in self.regions.values():
+            #         base_url = (
+            #             'https://s.weibo.com/weibo?q={}&region=custom:{}:1000'
+            #         ).format(keyword, region['code'])
+            #         url = base_url + self.weibo_type
+            #         url += self.contain_type
+            #         url += '&timescope=custom:{}:{}'.format(start_str, end_str)
+            #         # 获取一个省的搜索结果
+            #         yield scrapy.Request(url=url,
+            #                              callback=self.parse,
+            #                              meta={
+            #                                  'base_url': base_url,
+            #                                  'keyword': keyword,
+            #                                  'province': region
+            #                              })
 
     def check_environment(self):
         """判断配置要求的软件是否已安装"""
@@ -100,9 +138,10 @@ class SearchSpider(scrapy.Spider):
         is_empty = response.xpath(
             '//div[@class="card card-no-result s-pt20b40"]')
         page_count = len(response.xpath('//ul[@class="s-scroll"]/li'))
+        # print('parse in 12 hrs:', page_count, '\n')
         if is_empty:
-            print('当前页面搜索结果为空')
-        elif page_count < self.further_threshold:
+            logger.warning('当前页面搜索结果为空')
+        else:
             # 解析当前页面
             for weibo in self.parse_weibo(response):
                 self.check_environment()
@@ -111,29 +150,30 @@ class SearchSpider(scrapy.Spider):
                 '//a[@class="next"]/@href').extract_first()
             if next_url:
                 next_url = self.base_url + next_url
+                print(next_url)
                 yield scrapy.Request(url=next_url,
-                                     callback=self.parse_page,
+                                     callback=self.parse,
                                      meta={'keyword': keyword})
-        else:
-            start_date = datetime.strptime(self.start_date, '%Y-%m-%d')
-            end_date = datetime.strptime(self.end_date, '%Y-%m-%d')
-            while start_date <= end_date:
-                start_str = start_date.strftime('%Y-%m-%d') + '-0'
-                start_date = start_date + timedelta(days=1)
-                end_str = start_date.strftime('%Y-%m-%d') + '-0'
-                url = base_url + self.weibo_type
-                url += self.contain_type
-                url += '&timescope=custom:{}:{}&page=1'.format(
-                    start_str, end_str)
-                # 获取一天的搜索结果
-                yield scrapy.Request(url=url,
-                                     callback=self.parse_by_day,
-                                     meta={
-                                         'base_url': base_url,
-                                         'keyword': keyword,
-                                         'province': province,
-                                         'date': start_str[:-2]
-                                     })
+        # else:
+        #     start_date = datetime.strptime(self.start_date, '%Y-%m-%d')
+        #     end_date = datetime.strptime(self.end_date, '%Y-%m-%d')
+        #     while start_date <= end_date:
+        #         start_str = start_date.strftime('%Y-%m-%d') + '-0'
+        #         start_date = start_date + timedelta(days=1)
+        #         end_str = start_date.strftime('%Y-%m-%d') + '-0'
+        #         url = base_url + self.weibo_type
+        #         url += self.contain_type
+        #         url += '&timescope=custom:{}:{}&page=1'.format(
+        #             start_str, end_str)
+        #         # 获取一天的搜索结果
+        #         yield scrapy.Request(url=url,
+        #                              callback=self.parse_by_day,
+        #                              meta={
+        #                                  'base_url': base_url,
+        #                                  'keyword': keyword,
+        #                                  'province': province,
+        #                                  'date': start_str[:-2]
+        #                              })
 
     def parse_by_day(self, response):
         """以天为单位筛选"""
@@ -144,8 +184,9 @@ class SearchSpider(scrapy.Spider):
             '//div[@class="card card-no-result s-pt20b40"]')
         date = response.meta.get('date')
         page_count = len(response.xpath('//ul[@class="s-scroll"]/li'))
+        print('parse_by_day page count:', page_count, '\n')
         if is_empty:
-            print('当前页面搜索结果为空')
+            logger.warning('当前页面搜索结果为空')
         elif page_count < self.further_threshold:
             # 解析当前页面
             for weibo in self.parse_weibo(response):
@@ -191,8 +232,9 @@ class SearchSpider(scrapy.Spider):
         start_time = response.meta.get('start_time')
         end_time = response.meta.get('end_time')
         page_count = len(response.xpath('//ul[@class="s-scroll"]/li'))
+        print('parse_by_hour page count:', page_count, '\n')
         if is_empty:
-            print('当前页面搜索结果为空')
+            logger.warning('当前页面搜索结果为空')
         elif page_count < self.further_threshold:
             # 解析当前页面
             for weibo in self.parse_weibo(response):
@@ -232,8 +274,9 @@ class SearchSpider(scrapy.Spider):
         end_time = response.meta.get('end_time')
         province = response.meta.get('province')
         page_count = len(response.xpath('//ul[@class="s-scroll"]/li'))
+        print('parse_by_hour_province page count:', page_count, '\n')
         if is_empty:
-            print('当前页面搜索结果为空')
+            logger.warning('当前页面搜索结果为空')
         elif page_count < self.further_threshold:
             # 解析当前页面
             for weibo in self.parse_weibo(response):
@@ -271,7 +314,7 @@ class SearchSpider(scrapy.Spider):
         is_empty = response.xpath(
             '//div[@class="card card-no-result s-pt20b40"]')
         if is_empty:
-            print('当前页面搜索结果为空')
+            logger.warning('当前页面搜索结果为空')
         else:
             for weibo in self.parse_weibo(response):
                 self.check_environment()
@@ -353,12 +396,17 @@ class SearchSpider(scrapy.Spider):
             if info:
                 weibo = WeiboItem()
                 weibo['id'] = sel.xpath('@mid').extract_first()
-                weibo['bid'] = sel.xpath(
-                    './/p[@class="from"]/a[1]/@href').extract_first(
+                try:
+                    weibo['bid'] = sel.xpath(
+                        './/p[@class="from"]/a[1]/@href').extract_first(
+                    ).split('/')[-1].split('?')[0]
+                except:
+                    weibo['bid'] = sel.xpath(
+                        './/div[@class="from"]/a[1]/@href').extract_first(
                     ).split('/')[-1].split('?')[0]
                 weibo['user_id'] = info[0].xpath(
                     'div[2]/a/@href').extract_first().split('?')[0].split(
-                        '/')[-1]
+                    '/')[-1]
                 weibo['screen_name'] = info[0].xpath(
                     'div[2]/a/@nick-name').extract_first()
                 txt_sel = sel.xpath('.//p[@class="txt"]')[0]
@@ -390,7 +438,7 @@ class SearchSpider(scrapy.Spider):
                         is_long_weibo = True
                 weibo['text'] = txt_sel.xpath(
                     'string(.)').extract_first().replace('\u200b', '').replace(
-                        '\ue627', '')
+                    '\ue627', '')
                 weibo['article_url'] = self.get_article_url(txt_sel)
                 weibo['location'] = self.get_location(txt_sel)
                 if weibo['location']:
@@ -407,7 +455,7 @@ class SearchSpider(scrapy.Spider):
                 try:
                     reposts_count = re.findall(r'\d+.*', reposts_count)
                 except TypeError:
-                    print(
+                    logger.error(
                         "无法解析转发按钮，可能是 1) 网页布局有改动 2) cookie无效或已过期。\n"
                         "请在 https://github.com/dataabc/weibo-search 查看文档，以解决问题，"
                     )
@@ -417,7 +465,10 @@ class SearchSpider(scrapy.Spider):
                 comments_count = sel.xpath(
                     './/a[@action-type="feed_list_comment"]/text()'
                 ).extract_first()
-                comments_count = re.findall(r'\d+.*', comments_count)
+                try:
+                    comments_count = re.findall(r'\d+.*', comments_count)
+                except:
+                    comments_count = 0
                 weibo['comments_count'] = comments_count[
                     0] if comments_count else '0'
                 attitudes_count = sel.xpath(
@@ -425,12 +476,21 @@ class SearchSpider(scrapy.Spider):
                 attitudes_count = re.findall(r'\d+.*', attitudes_count)
                 weibo['attitudes_count'] = attitudes_count[
                     0] if attitudes_count else '0'
-                created_at = sel.xpath(
-                    './/p[@class="from"]/a[1]/text()').extract_first(
+                try:
+                    created_at = sel.xpath(
+                        './/p[@class="from"]/a[1]/text()').extract_first(
+                    ).replace(' ', '').replace('\n', '').split('前')[0]
+                except:
+                    created_at = sel.xpath(
+                        './/div[@class="from"]/a[1]/text()').extract_first(
                     ).replace(' ', '').replace('\n', '').split('前')[0]
                 weibo['created_at'] = util.standardize_date(created_at)
-                source = sel.xpath('.//p[@class="from"]/a[2]/text()'
-                                   ).extract_first()
+                try:
+                    source = sel.xpath('.//p[@class="from"]/a[2]/text()'
+                                       ).extract_first()
+                except:
+                    source = sel.xpath('.//div[@class="from"]/a[2]/text()'
+                                       ).extract_first()
                 weibo['source'] = source if source else ''
                 pics = ''
                 is_exist_pic = sel.xpath(
@@ -462,8 +522,13 @@ class SearchSpider(scrapy.Spider):
                     retweet['id'] = retweet_sel[0].xpath(
                         './/a[@action-type="feed_list_like"]/@action-data'
                     ).extract_first()[4:]
-                    retweet['bid'] = retweet_sel[0].xpath(
-                        './/p[@class="from"]/a/@href').extract_first().split(
+                    try:
+                        retweet['bid'] = retweet_sel[0].xpath(
+                            './/p[@class="from"]/a/@href').extract_first().split(
+                            '/')[-1].split('?')[0]
+                    except:
+                        retweet['bid'] = retweet_sel[0].xpath(
+                            './/div[@class="from"]/a/@href').extract_first().split(
                             '/')[-1].split('?')[0]
                     info = retweet_sel[0].xpath(
                         './/div[@node-type="feed_list_forwardContent"]/a[1]'
@@ -475,7 +540,7 @@ class SearchSpider(scrapy.Spider):
                     retweet['text'] = retweet_txt_sel.xpath(
                         'string(.)').extract_first().replace('\u200b',
                                                              '').replace(
-                                                                 '\ue627', '')
+                        '\ue627', '')
                     retweet['article_url'] = self.get_article_url(
                         retweet_txt_sel)
                     retweet['location'] = self.get_location(retweet_txt_sel)
@@ -507,7 +572,7 @@ class SearchSpider(scrapy.Spider):
                         0] if attitudes_count else '0'
                     created_at = retweet_sel[0].xpath(
                         './/p[@class="from"]/a[1]/text()').extract_first(
-                        ).replace(' ', '').replace('\n', '').split('前')[0]
+                    ).replace(' ', '').replace('\n', '').split('前')[0]
                     retweet['created_at'] = util.standardize_date(created_at)
                     source = retweet_sel[0].xpath(
                         './/p[@class="from"]/a[2]/text()').extract_first()
@@ -517,5 +582,10 @@ class SearchSpider(scrapy.Spider):
                     retweet['retweet_id'] = ''
                     yield {'weibo': retweet, 'keyword': keyword}
                     weibo['retweet_id'] = retweet['id']
-                print(weibo)
+                self.counting = self.counting + 1
+                if (self.counting % 500 == 0):
+                    logger.info('work in progress. posts count: ' + str(self.counting))
+                    logger.info(weibo)
+                    print(weibo)
+                    print('work in progress. posts count: ' + str(self.counting))
                 yield {'weibo': weibo, 'keyword': keyword}
