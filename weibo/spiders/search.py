@@ -123,7 +123,7 @@ class SearchSpider(scrapy.Spider):
         is_empty = response.xpath(
             '//div[@class="card card-no-result s-pt20b40"]')
         page_count = len(response.xpath('//ul[@class="s-scroll"]/li'))
-        # print('parse in 12 hrs:', page_count, '\n')
+        print(response.xpath('//span[@class="ctips"]//text()').extract_first(),page_count,"pages")
         if is_empty:
             logger.warning('当前页面搜索结果为空')
         else:
