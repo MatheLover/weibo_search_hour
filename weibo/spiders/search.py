@@ -77,19 +77,12 @@ class SearchSpider(scrapy.Spider):
                     'REGION'):
                 base_url = 'https://s.weibo.com/weibo?q=%s' % keyword
                 url = base_url + self.weibo_type
-                self.constant_url =  url + self.contain_type
+                self.constant_url = url + self.contain_type
 
                 # search by 1 hr
                 while self.start_date_2 < self.end_date_2:
                     for i in range(1, 25):
-                        # start date e.g. 2020-09-01-00:00
-                        start_str = self.start_date_2.strftime('%Y-%m-%d-X%H').replace(
-                            'X0', 'X').replace('X', '')
-
-                        # update date e.g. 2020-09-01-01:00
-                        self.start_date_2 = self.start_date_2 + timedelta(hours=1)
-                        end_str = self.start_date_2.strftime('%Y-%m-%d-X%H').replace(
-                            'X0', 'X').replace('X', '')
+                        start_str, end_str = self.date_processing()
 
                         # construct url
                         start_url = self.constant_url + '&timescope=custom:{}:{}'.format(start_str, end_str)
@@ -99,6 +92,30 @@ class SearchSpider(scrapy.Spider):
                                                  'base_url': base_url,
                                                  'keyword': keyword
                                              })
+            else:
+                for region in self.regions.values():
+                    base_url = (
+                        'https://s.weibo.com/weibo?q={}&region=custom:{}:1000'
+                    ).format(keyword, region['code'])
+                    url = base_url + self.weibo_type
+                    self.constant_url = url + self.contain_type
+
+                    # search by 1 hr
+                    while self.start_date_2 < self.end_date_2:
+                        for i in range(1, 25):
+                            start_str, end_str = self.date_processing()
+
+                            # construct url
+                            start_url = self.constant_url + '&timescope=custom:{}:{}'.format(start_str, end_str)
+
+                            yield scrapy.Request(url=start_url,
+                                                 callback=self.parse,
+                                                 meta={
+                                                     'base_url': base_url,
+                                                     'keyword': keyword,
+                                                     'province': region
+                                                 })
+
 
 
     def check_environment(self):
@@ -123,7 +140,7 @@ class SearchSpider(scrapy.Spider):
         is_empty = response.xpath(
             '//div[@class="card card-no-result s-pt20b40"]')
         page_count = len(response.xpath('//ul[@class="s-scroll"]/li'))
-        print(response.xpath('//span[@class="ctips"]//text()').extract_first(),page_count,"pages")
+        print(response.xpath('//span[@class="ctips"]//text()').extract_first(), page_count, "pages")
         if is_empty:
             logger.warning('当前页面搜索结果为空')
         else:
@@ -139,9 +156,6 @@ class SearchSpider(scrapy.Spider):
                 yield scrapy.Request(url=next_url,
                                      callback=self.parse,
                                      meta={'keyword': keyword})
-
-
-
 
     def get_article_url(self, selector):
         """获取微博头条文章url"""
@@ -201,6 +215,18 @@ class SearchSpider(scrapy.Spider):
         if topic_list:
             topics = ','.join(topic_list)
         return topics
+
+    def date_processing(self):
+        # start date e.g. 2020-09-01-00:00
+        start_str = self.start_date_2.strftime('%Y-%m-%d-X%H').replace(
+            'X0', 'X').replace('X', '')
+
+        # update date e.g. 2020-09-01-01:00
+        self.start_date_2 = self.start_date_2 + timedelta(hours=1)
+        end_str = self.start_date_2.strftime('%Y-%m-%d-X%H').replace(
+            'X0', 'X').replace('X', '')
+
+        return start_str, end_str
 
     def parse_weibo(self, response):
         """解析网页中的微博信息"""
