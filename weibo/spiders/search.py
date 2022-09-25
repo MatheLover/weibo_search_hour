@@ -12,6 +12,7 @@ from scrapy.utils.project import get_project_settings
 from weibo.items import WeiboItem
 import logging
 
+
 # logging.basicConfig(filename='../weibo search/'+__name__+'.log',format='[%(asctime)s-%(filename)s-%(levelname)s:%(message)s]', level = logging.WARNING,filemode='a',datefmt='%Y-%m-%d%I:%M:%S %p')
 
 
@@ -21,7 +22,7 @@ logger.setLevel(logging.INFO)
 formatter = logging.Formatter(fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y/%m/%d %H:%M:%S')
 
 # 日志文件输出
-fh = logging.FileHandler('../weibo-search-hongchuan/' + __name__ + '.log')
+fh = logging.FileHandler('../weibo-search-hongchuan_rui/' + __name__ + '.log')
 fh.setFormatter(formatter)
 logger.addHandler(fh)
 
@@ -71,6 +72,7 @@ class SearchSpider(scrapy.Spider):
     constant_url = ''
 
     def start_requests(self):
+
         for keyword in self.keyword_list:
             logger.info('keyword searching: ' + keyword)
             if not self.settings.get('REGION') or '全部' in self.settings.get(
@@ -118,6 +120,8 @@ class SearchSpider(scrapy.Spider):
 
 
 
+
+
     def check_environment(self):
         """判断配置要求的软件是否已安装"""
         if self.pymongo_error:
@@ -140,7 +144,7 @@ class SearchSpider(scrapy.Spider):
         is_empty = response.xpath(
             '//div[@class="card card-no-result s-pt20b40"]')
         page_count = len(response.xpath('//ul[@class="s-scroll"]/li'))
-        print(response.xpath('//span[@class="ctips"]//text()').extract_first(), page_count, "pages")
+        logger.info(response.xpath('//span[@class="ctips"]//text()').extract_first()+" "+str(page_count)+"pages")
         if is_empty:
             logger.warning('当前页面搜索结果为空')
         else:
@@ -152,7 +156,7 @@ class SearchSpider(scrapy.Spider):
                 '//a[@class="next"]/@href').extract_first()
             if next_url:
                 next_url = self.base_url + next_url
-                print(next_url)
+                # print(next_url)
                 yield scrapy.Request(url=next_url,
                                      callback=self.parse,
                                      meta={'keyword': keyword})
@@ -431,3 +435,8 @@ class SearchSpider(scrapy.Spider):
                     print(weibo)
                     print('work in progress. posts count: ' + str(self.counting))
                 yield {'weibo': weibo, 'keyword': keyword}
+
+    def close(self, reason):
+        start_time = self.crawler.stats.get_value('start_time')
+        finish_time = self.crawler.stats.get_value('finish_time')
+        print("Total run time: ", finish_time - start_time, " (hour:min:sec) ")
