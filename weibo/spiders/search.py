@@ -161,6 +161,8 @@ class SearchSpider(scrapy.Spider):
                                      callback=self.parse,
                                      meta={'keyword': keyword})
 
+
+
     def get_article_url(self, selector):
         """获取微博头条文章url"""
         article_url = ''
