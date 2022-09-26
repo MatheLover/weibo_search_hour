@@ -118,6 +118,10 @@ class SearchSpider(scrapy.Spider):
                                                      'province': region
                                                  })
 
+            # reset start and end date for next keyword
+            self.end_date_2 = datetime.strptime(end_str, '%Y-%m-%d-%H')
+            self.start_date_2 = datetime.strptime(start_str, '%Y-%m-%d-%H')
+
 
 
 
