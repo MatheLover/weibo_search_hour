@@ -99,7 +99,6 @@ class SearchSpider(scrapy.Spider):
                     #  Note: If start date is 2020-09-01 and end date is 2020-09-02,
                     #  the whole period starts from 2020-09-01-0 and ends at 2020-09-02-0
                     for i in range(1, 25):
-
                         # process start and end time
                         start_str, end_str = self.date_processing()
 
@@ -178,18 +177,29 @@ class SearchSpider(scrapy.Spider):
         else:
             # if 1-page result
             if page_count == 0:
-                # log 1 page result info
-                logger.info(
-                    keyword + " " + response.xpath('//span[@class="ctips"]//text()').extract_first() + " 1" + "pages")
+                try:
+                    # period
+                    period = response.xpath('//span[@class="ctips"]//text()').extract_first()
+
+                    # log 1 page result info
+                    logger.info(
+                        keyword + " " + period + " 1" + "pages")
+                except:
+                    print("No period information or period information is abnormal")
             else:
-                # log (page_count) results
-                logger.info(
-                    keyword + " " + response.xpath('//span[@class="ctips"]//text()').extract_first() + " " + str(
-                        page_count) + "pages")
+                try:
+                    # period_2
+                    period_2 = response.xpath('//span[@class="ctips"]//text()').extract_first()
+
+                    # log (page_count) results
+                    logger.info(
+                        keyword + " " + period_2 + " " + str(
+                            page_count) + "pages")
+                except:
+                    print("No period information or period information is abnormal")
 
             # process the current page
             for weibo in self.parse_weibo(response):
-
                 # check software dependency
                 self.check_environment()
 
