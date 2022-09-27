@@ -12,10 +12,7 @@ from scrapy.utils.project import get_project_settings
 from weibo.items import WeiboItem
 import logging
 
-
-# logging.basicConfig(filename='../weibo search/'+__name__+'.log',format='[%(asctime)s-%(filename)s-%(levelname)s:%(message)s]', level = logging.WARNING,filemode='a',datefmt='%Y-%m-%d%I:%M:%S %p')
-
-
+# --- create log file --- #
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 # 消息格式化
@@ -27,24 +24,28 @@ fh.setFormatter(formatter)
 logger.addHandler(fh)
 
 
-# create logger
-
 class SearchSpider(scrapy.Spider):
+    # initial setup including domains
     name = 'search'
     allowed_domains = ['weibo.com']
     settings = get_project_settings()
-    keyword_list = settings.get('KEYWORD_LIST')
+
+    # post counter
     counting = 0
+
+    # initialize keyword list
+    keyword_list = settings.get('KEYWORD_LIST')
     if not isinstance(keyword_list, list):
         if not os.path.isabs(keyword_list):
             keyword_list = os.getcwd() + os.sep + keyword_list
         if not os.path.isfile(keyword_list):
             sys.exit('不存在%s文件' % keyword_list)
         keyword_list = util.get_keyword_list(keyword_list)
-
     for i, keyword in enumerate(keyword_list):
         if len(keyword) > 2 and keyword[0] == '#' and keyword[-1] == '#':
             keyword_list[i] = '%23' + keyword[1:-1] + '%23'
+
+    # get info from settings.py
     weibo_type = util.convert_weibo_type(settings.get('WEIBO_TYPE'))
     contain_type = util.convert_contain_type(settings.get('CONTAIN_TYPE'))
     regions = util.get_regions(settings.get('REGION'))
@@ -60,7 +61,7 @@ class SearchSpider(scrapy.Spider):
     mysql_error = False
     pymysql_error = False
 
-    # initialize date in  yy-mm-dd-hh format
+    # initialize start and end dates in  yy-mm-dd-hh format
     start_date = datetime.strptime(start_date, '%Y-%m-%d')
     end_date = datetime.strptime(end_date,
                                  '%Y-%m-%d')
@@ -69,25 +70,43 @@ class SearchSpider(scrapy.Spider):
     end_date_2 = datetime.strptime(end_str, '%Y-%m-%d-%H')
     start_date_2 = datetime.strptime(start_str, '%Y-%m-%d-%H')
 
+    # set up url variable and later it will be assigned as base_url + self.weibo_type + self.contain_type
+    # e.g. 'https://s.weibo.com/weibo?q=香港&typeall=1&suball=1'
     constant_url = ''
 
     def start_requests(self):
-
+        # iterate each keyword
         for keyword in self.keyword_list:
+
+            # log keyword
             logger.info('keyword searching: ' + keyword)
+
+            # for all provinces
             if not self.settings.get('REGION') or '全部' in self.settings.get(
                     'REGION'):
+
+                # construct url excluding start and end dates
                 base_url = 'https://s.weibo.com/weibo?q=%s' % keyword
                 url = base_url + self.weibo_type
                 self.constant_url = url + self.contain_type
 
-                # search by 1 hr
+                # construct url in one-hour manner and perform search
+                # 2020-09-01-13:2020-09-01-14 means 2020-09-01 13:00 to 2020-09-01 14:00
+                # e.g. https://s.weibo.com/weibo?q=连花清瘟&typeall=1&suball=1&timescope=custom:2020-09-01-13:2020-09-01-14
+                # start_date should not exceed the end date
                 while self.start_date_2 < self.end_date_2:
+
+                    #  Note: If start date is 2020-09-01 and end date is 2020-09-02,
+                    #  the whole period starts from 2020-09-01-0 and ends at 2020-09-02-0
                     for i in range(1, 25):
+
+                        # process start and end time
                         start_str, end_str = self.date_processing()
 
-                        # construct url
+                        # construct url with start and end time in 1 hour
                         start_url = self.constant_url + '&timescope=custom:{}:{}'.format(start_str, end_str)
+
+                        # make request to start_url and call parse method for its response
                         yield scrapy.Request(url=start_url,
                                              callback=self.parse,
                                              meta={
@@ -95,21 +114,23 @@ class SearchSpider(scrapy.Spider):
                                                  'keyword': keyword
                                              })
             else:
+                # for each province
                 for region in self.regions.values():
+
+                    # construct region-based url without start and end time
                     base_url = (
                         'https://s.weibo.com/weibo?q={}&region=custom:{}:1000'
                     ).format(keyword, region['code'])
                     url = base_url + self.weibo_type
                     self.constant_url = url + self.contain_type
 
-                    # search by 1 hr
+                    # same as above
                     while self.start_date_2 < self.end_date_2:
                         for i in range(1, 25):
                             start_str, end_str = self.date_processing()
-
-                            # construct url
                             start_url = self.constant_url + '&timescope=custom:{}:{}'.format(start_str, end_str)
 
+                            # add province in meta
                             yield scrapy.Request(url=start_url,
                                                  callback=self.parse,
                                                  meta={
@@ -118,13 +139,8 @@ class SearchSpider(scrapy.Spider):
                                                      'province': region
                                                  })
 
-            # reset start and end date for next keyword
-            self.end_date_2 = datetime.strptime(end_str, '%Y-%m-%d-%H')
-            self.start_date_2 = datetime.strptime(start_str, '%Y-%m-%d-%H')
-
-
-
-
+            # reset start date for next keyword
+            self.start_date_2 = datetime.strptime(self.start_str, '%Y-%m-%d-%H')
 
     def check_environment(self):
         """判断配置要求的软件是否已安装"""
@@ -142,30 +158,57 @@ class SearchSpider(scrapy.Spider):
             raise CloseSpider()
 
     def parse(self, response):
-        base_url = response.meta.get('base_url')
+        """Construct urls for all result pages of each search with a specific timeslot(e.g.https://s.weibo.com/weibo?q=连花清瘟&typeall=1&suball=1&timescope=custom:2020-09-01-13:2020-09-01-14 )
+        recursively and call parse_weibo method to process each result page """
+
+        # retrieve keywords
         keyword = response.meta.get('keyword')
-        province = response.meta.get('province')
+
+        # whether the page is empty
         is_empty = response.xpath(
             '//div[@class="card card-no-result s-pt20b40"]')
+
+        # number of result pages for each search within a specific timeslot
         page_count = len(response.xpath('//ul[@class="s-scroll"]/li'))
-        logger.info(response.xpath('//span[@class="ctips"]//text()').extract_first()+" "+str(page_count)+"pages")
+
+        # empty
         if is_empty:
+            # log empty warning
             logger.warning('当前页面搜索结果为空')
         else:
-            # 解析当前页面
+            # if 1-page result
+            if page_count == 0:
+                # log 1 page result info
+                logger.info(
+                    keyword + " " + response.xpath('//span[@class="ctips"]//text()').extract_first() + " 1" + "pages")
+            else:
+                # log (page_count) results
+                logger.info(
+                    keyword + " " + response.xpath('//span[@class="ctips"]//text()').extract_first() + " " + str(
+                        page_count) + "pages")
+
+            # process the current page
             for weibo in self.parse_weibo(response):
+
+                # check software dependency
                 self.check_environment()
+
+                # yield weibo
                 yield weibo
+
+            # find next page url
             next_url = response.xpath(
                 '//a[@class="next"]/@href').extract_first()
+
+            # if next url exists
             if next_url:
+                # note: use 'https://s.weibo.com' in this case; self is required
                 next_url = self.base_url + next_url
-                # print(next_url)
+
+                # make request to next url and recursively call parse method
                 yield scrapy.Request(url=next_url,
                                      callback=self.parse,
                                      meta={'keyword': keyword})
-
-
 
     def get_article_url(self, selector):
         """获取微博头条文章url"""
@@ -227,12 +270,16 @@ class SearchSpider(scrapy.Spider):
         return topics
 
     def date_processing(self):
-        # start date e.g. 2020-09-01-00:00
+        """ Return the start time and end time for each hour, e.g. 2020-09-01-13 and 2020-09-01-14"""
+
+        # start time e.g. 2020-09-01-13:00
         start_str = self.start_date_2.strftime('%Y-%m-%d-X%H').replace(
             'X0', 'X').replace('X', '')
 
-        # update date e.g. 2020-09-01-01:00
+        # update to obtain end time e.g. 2020-09-01-14:00
         self.start_date_2 = self.start_date_2 + timedelta(hours=1)
+
+        # format end time
         end_str = self.start_date_2.strftime('%Y-%m-%d-X%H').replace(
             'X0', 'X').replace('X', '')
 
@@ -241,10 +288,15 @@ class SearchSpider(scrapy.Spider):
     def parse_weibo(self, response):
         """解析网页中的微博信息"""
         keyword = response.meta.get('keyword')
+
+        # for each post on the page
         for sel in response.xpath("//div[@class='card-wrap']"):
+            # enter into more detail
             info = sel.xpath(
                 "div[@class='card']/div[@class='card-feed']/div[@class='content']/div[@class='info']"
             )
+
+            # extract different info
             if info:
                 weibo = WeiboItem()
                 weibo['id'] = sel.xpath('@mid').extract_first()
@@ -435,6 +487,8 @@ class SearchSpider(scrapy.Spider):
                     yield {'weibo': retweet, 'keyword': keyword}
                     weibo['retweet_id'] = retweet['id']
                 self.counting = self.counting + 1
+
+                # print progress for every 500 posts
                 if (self.counting % 500 == 0):
                     logger.info('work in progress. posts count: ' + str(self.counting))
                     logger.info(weibo)
@@ -443,6 +497,7 @@ class SearchSpider(scrapy.Spider):
                 yield {'weibo': weibo, 'keyword': keyword}
 
     def close(self, reason):
+        """Record program duration"""
         start_time = self.crawler.stats.get_value('start_time')
         finish_time = self.crawler.stats.get_value('finish_time')
         print("Total run time: ", finish_time - start_time, " (hour:min:sec) ")
