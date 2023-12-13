@@ -12,7 +12,7 @@ DEFAULT_REQUEST_HEADERS = {
     'Accept':
     'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7',
-    'cookie':'SINAGLOBAL=1702503602138.199.1663137388815; _ga=GA1.2.2033993818.1663207300; SUBP=0033WrSXqPxfM725Ws9jqgMF55529P9D9WhdSJeC9mv91mz1QDEL5rmo5JpX5KMhUgL.FoMNS0n0ehn7eK.2dJLoIp7LxKML1KBLBKnLxKqL1hnLBoMNS0MRe05Reh24; WBPSESS=G5zTEiAju-P4VT5VY1Fee02cMa2ODOR0SOuECSzSHz-GtNkp4vbtrsbCub4E5TB_boFL26YXl-zqfEQs_6r-YWBqVboLN7P5rqXF-_LvHLgBXPQJoKV316iWjnMuqEDKfYd7xFdfFpy9LNzEhmMu2g==; ULV=1664251821831:12:12:2:9005728352320.455.1664251821792:1664157625040; PC_TOKEN=946d17d5a7; ALF=1695818365; SSOLoginState=1664282368; SCF=AkR6w_OILlm5cICJ3O0zJLVeILJ5f4DeTub9f3BrVvYS-Q-04bd6pGtmYjSZeDSd0RJ7yxYqYf7ddXO27_Mg3JU.; SUB=_2A25ONp9QDeRhGeFJ7FoS8CbMyjWIHXVtRfeYrDV8PUNbmtAfLUn9kW9NfwF-LJPoK80RU9MYsxThF1L3KRU1hR4p; XSRF-TOKEN=SSOMo8f_MOPa3lcjz8A1J5mY'
+    'cookie':'SINAGLOBAL=2999095678287.9487.1694533442032; SCF=AkR6w_OILlm5cICJ3O0zJLVeILJ5f4DeTub9f3BrVvYSF_2pydkHBUYzyHRUK2BIMIe-bKD94bWqTNjUllWmhng.; SUB=_2A25IfD1YDeRhGeFJ7FoS8CbMyjWIHXVr8DCQrDV8PUNbmtAbLWeikW9NfwF-LFA8xHwv-Dwr7Amd3k3zcmQ4jkBs; SUBP=0033WrSXqPxfM725Ws9jqgMF55529P9D9WhdSJeC9mv91mz1QDEL5rmo5JpX5o275NHD95QNS0MRe05Reh24Ws4DqcjMi--NiK.Xi-2Ri--ciKnRi-zNS0MN1he71h5p1Btt; ALF=1702987655; un=19830432360; WBPSESS=G5zTEiAju-P4VT5VY1Fee02cMa2ODOR0SOuECSzSHz-GtNkp4vbtrsbCub4E5TB_boFL26YXl-zqfEQs_6r-Ye1IIE1SuF4dfv2IWWqZG0ZBMX0FZye3uP3jUfih-H1aRQXsADHxRmQKn9dcQ453bw==; XSRF-TOKEN=bE8w4SfY0nxlE0PzGCsz2u8a; _s_tentry=weibo.com; Apache=5089640387669.39.1702430198621; ULV=1702430198717:5:2:2:5089640387669.39.1702430198621:1702382669871'
 }
 ITEM_PIPELINES = {
     'weibo.pipelines.DuplicatesPipeline': 300,
@@ -26,6 +26,7 @@ ITEM_PIPELINES = {
 # 如'keyword_list.txt'，txt文件中每个关键词占一行
 # KEYWORD_LIST = ['????']
 KEYWORD_LIST = 'keyword_list.txt'
+    #['张瑞敏','柳传志','任正非','李东生','王石']
 # 要搜索的微博类型，0代表搜索全部微博，1代表搜索全部原创微博，2代表热门微博，3代表关注人微博，4代表认证用户微博，5代表媒体微博，6代表观点微博
 WEIBO_TYPE = 0
 # 筛选结果微博中必需包含的内容，0代表不筛选，获取全部微博，1代表搜索包含图片的微博，2代表包含视频的微博，3代表包含音乐的微博，4代表包含短链接的微博
@@ -34,9 +35,9 @@ CONTAIN_TYPE = 0
 # 具体支持的地名见region.py文件，注意只支持省或直辖市的名字，省下面的市名及直辖市下面的区县名不支持，不筛选请用“全部”
 REGION = ['全部']
 # 搜索的起始日期，为yyyy-mm-dd形式，搜索结果包含该日期
-START_DATE = '2020-09-01'
+START_DATE = '2020-01-01'
 # 搜索的终止日期，为yyyy-mm-dd形式，搜索结果包含该日期
-END_DATE = '2020-09-02'
+END_DATE = '2020-12-31'
 # 进一步细分搜索的阈值，若结果页数大于等于该值，则认为结果没有完全展示，细分搜索条件重新搜索以获取更多微博。数值越大速度越快，也越有可能漏掉微博；数值越小速度越慢，获取的微博就越多。
 # 建议数值大小设置在40到50之间。
 FURTHER_THRESHOLD = 2
