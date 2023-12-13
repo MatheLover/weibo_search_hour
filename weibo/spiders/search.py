@@ -19,7 +19,7 @@ logger.setLevel(logging.INFO)
 formatter = logging.Formatter(fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y/%m/%d %H:%M:%S')
 
 # 日志文件输出
-fh = logging.FileHandler('../weibo-search-hongchuan_rui/' + __name__ + '.log')
+fh = logging.FileHandler('../weibo_search_hour/' + __name__ + '.log')
 fh.setFormatter(formatter)
 logger.addHandler(fh)
 
