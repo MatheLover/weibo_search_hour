@@ -105,6 +105,7 @@ class SearchSpider(scrapy.Spider):
                         # construct url with start and end time in 1 hour
                         start_url = self.constant_url + '&timescope=custom:{}:{}'.format(start_str, end_str)
 
+
                         # make request to start_url and call parse method for its response
                         yield scrapy.Request(url=start_url,
                                              callback=self.parse,
@@ -128,6 +129,7 @@ class SearchSpider(scrapy.Spider):
                         for i in range(1, 25):
                             start_str, end_str = self.date_processing()
                             start_url = self.constant_url + '&timescope=custom:{}:{}'.format(start_str, end_str)
+
 
                             # add province in meta
                             yield scrapy.Request(url=start_url,
@@ -173,7 +175,7 @@ class SearchSpider(scrapy.Spider):
         # empty
         if is_empty:
             # log empty warning
-            logger.warning('当前页面搜索结果为空')
+            logger.warning('当前页面搜索结果为空 '+response.url)
         else:
             # if 1-page result
             if page_count == 0:
